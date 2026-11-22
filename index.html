@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lotto Analyzer</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101827;color:#f1f5f9;font-family:Arial,sans-serif;padding:18px}
+header{text-align:center;padding:20px 0}
+h1{color:#38bdf8;margin-bottom:5px}
+.sub{color:#94a3b8;font-size:13px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:13px;padding:16px;margin:14px 0}
+label{display:block;margin:12px 0 7px;font-weight:bold}
+select,textarea,input,button{width:100%;padding:12px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:white;font-size:15px}
+textarea{height:150px;font-family:monospace}
+button{background:#0284c7;border:0;font-weight:bold;margin-top:12px}
+button:active{opacity:.7}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#0f172a;padding:13px;border-radius:9px}
+.stat strong{display:block;font-size:24px;color:#38bdf8}
+.stat span{font-size:12px;color:#94a3b8}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:9px 5px;border-bottom:1px solid #334155;text-align:left}
+th{color:#38bdf8}
+.num{display:inline-block;background:#0369a1;border-radius:50%;padding:7px;margin:3px;min-width:31px;text-align:center}
+small{color:#94a3b8}
+.error{color:#fca5a5}
+</style>
+</head>
+<body>
+<header>
+<h1>🎱 LOTTO ANALYZER</h1>
+<div class="sub">Analisi statistica delle 11 ruote italiane</div>
+</header>
+
+<div class="card">
+<h3>📥 Archivio estrazioni</h3>
+<p><small>Inserisci un'estrazione per riga nel formato: DATA, RUOTA, N1, N2, N3, N4, N5</small></p>
+<p><small>Esempio di formato: 2026-11-20, BARI, 1, 12, 25, 44, 78</small></p>
+<textarea id="data" placeholder="Incolla qui le estrazioni storiche..."></textarea>
+<button onclick="analyze()">Analizza estrazioni</button>
+<p id="message"></p>
+</div>
+
+<div class="card">
+<h3>📊 Seleziona ruota</h3>
+<select id="wheel" onchange="showStats()">
+<option value="TUTTE">Tutte le 11 ruote</option>
+<option>BARI</option><option>CAGLIARI</option>
+<option>FIRENZE</option><option>GENOVA</option>
+<option>MILANO</option><option>NAPOLI</option>
+<option>PALERMO</option><option>ROMA</option>
+<option>TORINO</option><option>VENEZIA</option>
+<option>NAZIONALE</option>
+</select>
+</div>
+
+<div class="card">
+<h3>📈 Riepilogo</h3>
+<div class="stats">
+<div class="stat"><strong id="draws">0</strong><span>Estrazioni analizzate</span></div>
+<div class="stat"><strong id="numbers">90</strong><span>Numeri possibili</span></div>
+</div>
+</div>
+
+<div class="card">
+<h3>⏳ Numeri più ritardatari</h3>
+<table><thead><tr><th>Numero</th><th>Ritardo</th><th>Uscite</th></tr></thead>
+<tbody id="late"></tbody></table>
+</div>
+
+<div class="card">
+<h3>🔥 Numeri più frequenti</h3>
+<table><thead><tr><th>Numero</th><th>Uscite</th><th>Ritardo</th></tr></thead>
+<tbody id="hot"></tbody></table>
+</div>
+
+<div class="card">
+<h3>🎯 Generatore di cinquina</h3>
+<p><small>Combina numeri ritardatari e frequenti. Non costituisce una previsione.</small></p>
+<button onclick="generate()">Genera cinquina</button>
+<div id="combination" style="margin-top:15px"></div>
+</div>
+
+<script>
+const wheels=["BARI","CAGLIARI","FIRENZE","GENOVA","MILANO","NAPOLI","PALERMO","ROMA","TORINO","VENEZIA","NAZIONALE"];
+let archive=[];
+let current=[];
+
+function analyze(){
+ const lines=document.getElementById("data").value.trim().split(/\n/);
+ const result=[];
+ let errors=0;
+ lines.forEach(line=>{
+  if(!line.trim())return;
+  const p=line.split(/[;,]/).map(x=>x.trim());
+  if(p.length!==7){errors++;return}
+  const date=p[0], wheel=p[1].toUpperCase();
+  const nums=p.slice(2).map(Number);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+     !wheels.includes(wheel) ||
+     nums.some(n=>!Number.isInteger(n)||n<1||n>90) ||
+     new Set(nums).size!==5){errors++;return}
+  result.push({date,wheel,nums});
+ });
+ archive=result;
+ document.getElementById("message").innerHTML=
+ result.length+" righe valide. "+errors+" righe non valide.";
+ showStats();
+}
+
+function showStats(){
+ const wheel=document.getElementById("wheel").value;
+ let draws=archive.filter(d=>wheel==="TUTTE"||d.wheel===wheel);
+ const byWheel={};
+ wheels.forEach(w=>{
+  byWheel[w]=draws.filter(d=>d.wheel===w)
+   .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,100);
+ });
+ current=wheel==="TUTTE"?Object.values(byWheel).flat():
+  byWheel[wheel];
+ document.getElementById("draws").textContent=current.length;
+ const freq=Array(91).fill(0);
+ const last=Array(91).fill(-1);
+ current.forEach((d,i)=>d.nums.forEach(n=>{
+  freq[n]++;
+  if(last[n]===-1)last[n]=i;
+ }));
+ const stats=[];
+ for(let n=1;n<=90;n++){
+  stats.push({n,f:freq[n],delay:last[n]===-1?current.length:last[n]});
+ }
+ const late=[...stats].sort((a,b)=>b.delay-a.delay||a.n-b.n).slice(0,10);
+ const hot=[...stats].sort((a,b)=>b.f-a.f||a.n-b.n).slice(0,10);
+ document.getElementById("late").innerHTML=late.map(x=>
+ `<tr><td>${x.n}</td><td>${x.delay}</td><td>${x.f}</td></tr>`).join("");
+ document.getElementById("hot").innerHTML=hot.map(x=>
+ `<tr><td>${x.n}</td><td>${x.f}</td><td>${x.delay}</td></tr>`).join("");
+}
+
+function generate(){
+ if(!current.length){
+  document.getElementById("combination").textContent="Carica prima le estrazioni.";
+  return;
+ }
+ const freq=Array(91).fill(0),last=Array(91).fill(-1);
+ current.forEach((d,i)=>d.nums.forEach(n=>{
+  freq[n]++;
+  if(last[n]===-1)last[n]=i;
+ }));
+ let stats=[];
+ for(let n=1;n<=90;n++){
+  stats.push({n,f:freq[n],delay:last[n]===-1?current.length:last[n]});
+ }
+ const late=[...stats].sort((a,b)=>b.delay-a.delay).slice(0,45);
+ const hot=[...stats].sort((a,b)=>b.f-a.f).slice(0,45);
+ let pool=[...late.slice(0,3),...hot.slice(0,2)];
+ let chosen=[...new Set(pool.map(x=>x.n))];
+ while(chosen.length<5){
+  const n=stats[Math.floor(Math.random()*90)].n;
+  if(!chosen.includes(n))chosen.push(n);
+ }
+ chosen=chosen.sort((a,b)=>a-b);
+ document.getElementById("combination").innerHTML=
+ chosen.map(n=>`<span class="num">${n}</span>`).join("");
+}
+</script>
+</body>
+</html>
